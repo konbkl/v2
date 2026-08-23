@@ -36,7 +36,7 @@ YT_API_KEY = getenv("YT_API_KEY" , None ) ## Your API key like: xbit_10000000xx0
 
 UPSTREAM_REPO = getenv(
     "UPSTREAM_REPO",
-    "https://github.com/istkharroohi78/Testop",
+    "https://github.com/konbkl/v2",
 )
 UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "master")
 GIT_TOKEN = getenv(
