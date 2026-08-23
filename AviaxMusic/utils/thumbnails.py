@@ -38,9 +38,7 @@ def truncate(text):
     text2 = text2.strip()     
     return [text1,text2]
 
-
-# 🔴 YAHAN FUNCTION KA NAAM gen_thumb KAR DIYA HAI 🔴
-async def gen_thumb(videoid):
+async def get_thumb(videoid):
     try:
         if os.path.isfile(f"cache/{videoid}.jpg"):
             return f"cache/{videoid}.jpg"
@@ -86,13 +84,7 @@ async def gen_thumb(videoid):
             background = enhancer.enhance(0.6)
             image2 = background
                                                                                             
-            # 🔴 PATH KO L2RMUSIC SE HATA KAR AviaxMusic KAR DIYA HAI 🔴
-            try:
-                circle = Image.open("AviaxMusic/assets/circle.png")
-            except:
-                circle = Image.new('RGBA', (720, 720), (0, 0, 0, 0))
-                draw_c = ImageDraw.Draw(circle)
-                draw_c.ellipse((30, 30, 690, 690), outline=make_col(), width=15)
+            circle = Image.open("AviaxMusic/assets/circle.png")
 
             # changing circle color
             im = circle
@@ -123,22 +115,14 @@ async def gen_thumb(videoid):
             image2.paste(image3, (50,70), mask = image3)
             image2.paste(circle, (0,0), mask = circle)
 
-            # 🔴 FONTS PATH BHI AviaxMusic KAR DIYA HAI 🔴
-            def get_font(path, size):
-                try:
-                    return ImageFont.truetype(path, size)
-                except:
-                    return ImageFont.load_default()
-
-            font1 = get_font('AviaxMusic/assets/font.ttf', 30)
-            font2 = get_font('AviaxMusic/assets/font2.ttf', 70)
-            font3 = get_font('AviaxMusic/assets/font2.ttf', 40)
-            font4 = get_font('AviaxMusic/assets/font2.ttf', 35)
+            # fonts
+            font1 = ImageFont.truetype('AviaxMusic/assets/font.ttf', 30)
+            font2 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 70)
+            font3 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 40)
+            font4 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 35)
 
             image4 = ImageDraw.Draw(image2)
-            
-            # Agar naam badalna ho toh 'AVIAX MUSIC' ko change kar lena
-            image4.text((10, 10), "AVIAX MUSIC", fill="white", font = font1, align ="left") 
+            image4.text((10, 10), "KHUSHI VIBES", fill="white", font = font1, align ="left") 
             image4.text((670, 150), "NOW PLAYING", fill="white", font = font2, stroke_width=2, stroke_fill="white", align ="left") 
 
             # title
@@ -161,5 +145,5 @@ async def gen_thumb(videoid):
             file = f"cache/{videoid}.jpg"
             return file
     except Exception as e:
-        print(f"Thumb Error: {e}")
+        print(e)
         return YOUTUBE_IMG_URL
