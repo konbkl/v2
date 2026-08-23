@@ -38,7 +38,8 @@ def truncate(text):
     text2 = text2.strip()     
     return [text1,text2]
 
-async def get_thumb(videoid):
+# CHANGED: 'get_thumb' to 'gen_thumb' to fix the ImportError
+async def gen_thumb(videoid):
     try:
         if os.path.isfile(f"cache/{videoid}.jpg"):
             return f"cache/{videoid}.jpg"
@@ -49,7 +50,8 @@ async def get_thumb(videoid):
             for result in (await results.next())["result"]:
                 try:
                     title = result["title"]
-                    title = re.sub("\W+", " ", title)
+                    # CHANGED: Added 'r' before the string to fix SyntaxWarning
+                    title = re.sub(r"\W+", " ", title) 
                     title = title.title()
                 except:
                     title = "Unsupported Title"
@@ -83,7 +85,7 @@ async def get_thumb(videoid):
             enhancer = ImageEnhance.Brightness(background)
             background = enhancer.enhance(0.6)
             image2 = background
-                                                                                            
+
             circle = Image.open("AviaxMusic/assets/circle.png")
 
             # changing circle color
@@ -110,7 +112,7 @@ async def get_thumb(videoid):
             final_img_arr = np.dstack((img_arr,lum_img_arr))
             image3 = Image.fromarray(final_img_arr)
             image3 = image3.resize((600,600))
-            
+
 
             image2.paste(image3, (50,70), mask = image3)
             image2.paste(circle, (0,0), mask = circle)
@@ -138,7 +140,7 @@ async def get_thumb(videoid):
             image4.text((670, 450), text=views, fill="white", font = font4, align ="left") 
             image4.text((670, 500), text=duration, fill="white", font = font4, align ="left") 
             image4.text((670, 550), text=channel, fill="white", font = font4, align ="left")
-            
+
             image2 = ImageOps.expand(image2,border=20,fill=make_col())
             image2 = image2.convert('RGB')
             image2.save(f"cache/{videoid}.jpg")
