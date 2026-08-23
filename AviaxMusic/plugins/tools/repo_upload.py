@@ -4,7 +4,7 @@ import subprocess
 import shutil
 import time
 from pyrogram import filters
-from AvivaxMusic import app
+from AviaxMusic import app
 from github import Github
 from config import OWNER_ID  
 
