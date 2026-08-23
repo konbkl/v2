@@ -8,7 +8,8 @@ from AviaxMusic import app
 from github import Github, GithubException
 from config import OWNER_ID  
 
-TEMP_DIR = "temp_repos"
+# FIXED: Ab ye humesha Absolute Path (Pakka Rasta) use karega
+TEMP_DIR = os.path.abspath("temp_repos")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 TEMP_CONFIG = {}
@@ -31,7 +32,6 @@ def safe_rm(path):
 def config_valid():
     if not TEMP_CONFIG:
         return False
-    # Time updated to 60 minutes (3600 seconds)
     if time.time() - TEMP_CONFIG.get("timestamp", 0) > 3600:
         TEMP_CONFIG.clear()
         return False
@@ -77,10 +77,13 @@ async def gitupload(client, message):
     if not (replied and replied.document and replied.document.file_name.endswith(".zip")):
         return await message.reply("⚠️ ᴘʟᴇᴀsᴇ ʀᴇᴘʟʏ ᴛᴏ ᴀ **ᴢɪᴘ** ғɪʟᴇ!")
 
+    # FIXED: Repo name ko safe banaya taaki Organization slashes (/) folder break na karein
+    safe_repo_name = repo_name.replace("/", "_").replace("\\", "_")
+
     zip_path = os.path.join(TEMP_DIR, replied.document.file_name)
-    extract_root = os.path.join(TEMP_DIR, f"{repo_name}_extract")
-    final_path = os.path.join(TEMP_DIR, f"{repo_name}_final")
-    clone_path = os.path.join(TEMP_DIR, f"{repo_name}_clone")
+    extract_root = os.path.join(TEMP_DIR, f"{safe_repo_name}_extract")
+    final_path = os.path.join(TEMP_DIR, f"{safe_repo_name}_final")
+    clone_path = os.path.join(TEMP_DIR, f"{safe_repo_name}_clone")
 
     safe_rm(zip_path)
     safe_rm(extract_root)
@@ -92,10 +95,13 @@ async def gitupload(client, message):
     try:
         user = g.get_user()
         
-        # Check if the repository already exists
+        # SMART CHECK: Check if repo exists (Supports Organization repos too)
         repo_exists = False
         try:
-            repo = user.get_repo(repo_name)
+            if "/" in repo_name:
+                repo = g.get_repo(repo_name)
+            else:
+                repo = user.get_repo(repo_name)
             repo_exists = True
         except GithubException as e:
             if e.status == 404:
@@ -103,7 +109,7 @@ async def gitupload(client, message):
             else:
                 raise e
 
-        # Extracting the zip file
+        # Extracting Zip File
         await replied.download(file_name=zip_path)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_root)
@@ -121,13 +127,11 @@ async def gitupload(client, message):
             if ".git" in dirs:
                 safe_rm(os.path.join(root, ".git"))
 
-        # Logical branching based on Repo existence
         if repo_exists:
             # ==> UPDATE EXISTING REPO
             remote_url = repo.clone_url.replace("https://", f"https://{GITHUB_TOKEN}@")
             run(["git", "clone", remote_url, clone_path], cwd=TEMP_DIR)
 
-            # Nayi files ko replace/copy karo
             for item in os.listdir(final_path):
                 s = os.path.join(final_path, item)
                 d = os.path.join(clone_path, item)
@@ -155,6 +159,10 @@ async def gitupload(client, message):
 
         else:
             # ==> CREATE NEW REPO
+            if "/" in repo_name:
+                await status.delete()
+                return await message.reply("❌ **ᴇʀʀᴏʀ :-** Naya Organization repo bot se direct create nahi ho sakta. Pehle khali repo GitHub par banayein, fir update karein.")
+                
             repo = user.create_repo(repo_name, private=is_private, description="🎉 sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ ᴜᴘʟᴏᴀᴅ ʙʏ :- ɪsᴛᴋʜᴀʀ ʙᴏᴛs 🌺", auto_init=False)
 
             run(["git", "init"], cwd=final_path)
@@ -183,7 +191,6 @@ async def gitupload(client, message):
         await status.delete()
         return await message.reply(f"❌** ᴇʀʀᴏʀ :-** `{e}`")
 
-    # Cleanup
     safe_rm(zip_path)
     safe_rm(extract_root)
     safe_rm(final_path)
