@@ -5,7 +5,7 @@ import re
 import aiofiles
 import aiohttp
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
-from yt_dlp import YoutubeDL
+from youtubesearchpython.__future__ import VideosSearch
 import numpy as np
 from config import YOUTUBE_IMG_URL
 
@@ -24,12 +24,6 @@ def truncate(text):
             text2 += " " + i
     return [text1.strip(), text2.strip()]
 
-def extract_info(url):
-    # Removed extract_flat taaki full details aayein
-    ydl_opts = {'quiet': True, 'no_warnings': True}
-    with YoutubeDL(ydl_opts) as ydl:
-        return ydl.extract_info(url, download=False)
-
 async def gen_thumb(videoid):
     try:
         os.makedirs("cache", exist_ok=True)
@@ -41,60 +35,72 @@ async def gen_thumb(videoid):
 
         url = f"https://www.youtube.com/watch?v={videoid}"
         
-        # 1. Safely Extract Full Details
-        try:
-            info = await asyncio.to_thread(extract_info, url)
-            title = re.sub(r"\W+", " ", info.get("title", "Playing Track")).title()
-            
-            duration_seconds = info.get("duration", 0)
-            if duration_seconds:
-                mins = int(duration_seconds) // 60
-                secs = int(duration_seconds) % 60
-                duration = f"{mins}:{secs:02d} Mins"
-            else:
-                duration = "Unknown Mins"
-                
-            views = str(info.get("view_count", "Unknown Views"))
-            channel = info.get("uploader", "Unknown Channel")
-            
-            if info.get("thumbnails"):
-                thumbnail_url = info["thumbnails"][-1]["url"]
-            else:
-                thumbnail_url = f"http://img.youtube.com/vi/{videoid}/maxresdefault.jpg"
-        except Exception as e:
-            print(f"yt-dlp error: {e}")
-            title, duration, views, channel = "Playing Track", "Unknown Mins", "Unknown Views", "Unknown Channel"
-            thumbnail_url = f"http://img.youtube.com/vi/{videoid}/hqdefault.jpg"
+        title = "Unknown Title"
+        duration = "Unknown Mins"
+        views = "Unknown Views"
+        channel = "Unknown Channel"
 
-        # 2. Download Thumbnail
+        # 1. Main Search (youtubesearchpython)
+        try:
+            results = VideosSearch(url, limit=1)
+            search_data = (await results.next())["result"]
+            if search_data:
+                result = search_data[0]
+                title = result.get("title", title)
+                title = re.sub(r"\W+", " ", title).title()
+                duration = result.get("duration", duration)
+                views = result.get("viewCount", {}).get("short", views)
+                channel = result.get("channel", {}).get("name", channel)
+        except Exception as e:
+            print(f"Search API Blocked: {e}")
+
+        # 2. HTML Scraping Fallback (Agar API block ho jaye toh bhi Title nikal lega)
+        if title == "Unknown Title":
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as resp:
+                        html = await resp.text()
+                        title_match = re.search(r'<title>(.*?)</title>', html)
+                        if title_match:
+                            title = title_match.group(1).replace(" - YouTube", "")
+                            title = re.sub(r"\W+", " ", title).title()
+            except:
+                title = "Playing Track"
+
+        # 3. Download Thumbnail
         async with aiohttp.ClientSession() as session:
-            async with session.get(thumbnail_url) as resp:
+            async with session.get(f"http://img.youtube.com/vi/{videoid}/maxresdefault.jpg") as resp:
                 if resp.status == 200:
                     async with aiofiles.open(raw_thumb, mode="wb") as f:
                         await f.write(await resp.read())
+                else:
+                    async with session.get(f"http://img.youtube.com/vi/{videoid}/hqdefault.jpg") as resp2:
+                        if resp2.status == 200:
+                            async with aiofiles.open(raw_thumb, mode="wb") as f:
+                                await f.write(await resp2.read())
 
         if not os.path.isfile(raw_thumb):
             return YOUTUBE_IMG_URL
 
-        # 3. ADVANCED IMAGE EDITING (Tech & Neon Theme)
+        # 4. ADVANCED IMAGE EDITING
         try:
             youtube = Image.open(raw_thumb).convert("RGBA")
             
-            # Background: High-quality Blur & Darken
+            # Background Blur & Darken
             background = youtube.resize((1280, 720), Image.Resampling.LANCZOS)
             background = background.filter(ImageFilter.GaussianBlur(15))
             background = ImageEnhance.Brightness(background).enhance(0.25)
             
             theme_color = get_neon_color()
 
-            # Center Circle: Perfect crop bina stretch kiye
+            # Center Circle (No Stretch)
             square_img = ImageOps.fit(youtube, (580, 580), centering=(0.5, 0.5))
             mask = Image.new('L', (580, 580), 0)
             draw = ImageDraw.Draw(mask)
             draw.ellipse((0, 0, 580, 580), fill=255)
             square_img.putalpha(mask)
             
-            # Custom Glowing Neon Ring
+            # Glowing Neon Ring
             ring = Image.new('RGBA', (610, 610), (0,0,0,0))
             ring_draw = ImageDraw.Draw(ring)
             ring_draw.ellipse((10, 10, 600, 600), outline=theme_color, width=10)
@@ -105,8 +111,8 @@ async def gen_thumb(videoid):
 
             # Fonts setup
             try:
-                font1 = ImageFont.truetype('AviaxMusic/assets/font.ttf', 35)
-                font2 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 75)
+                font1 = ImageFont.truetype('AviaxMusic/assets/font.ttf', 30)
+                font2 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 70)
                 font3 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 45)
                 font4 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 35)
             except:
@@ -114,26 +120,41 @@ async def gen_thumb(videoid):
 
             image4 = ImageDraw.Draw(background)
             
-            # Brand Name with Neon effect
+            # Brand Name
             image4.text((22, 22), "KHUSHI VIBES", fill="black", font=font1, align="left") 
             image4.text((20, 20), "KHUSHI VIBES", fill=theme_color, font=font1, align="left") 
 
-            # NOW PLAYING Header
-            image4.text((700, 150), "NOW PLAYING", fill="white", font=font2, stroke_width=2, stroke_fill=theme_color, align="left") 
-
-            # Title
-            title1 = truncate(title)
-            image4.text((700, 280), text=title1[0], fill="white", font=font3, align="left") 
-            if len(title1) > 1:
-                image4.text((700, 340), text=title1[1], fill="white", font=font3, align="left") 
-
-            # Stats (Tech-style transparent box)
-            # Semi-transparent box behind the text to make it clear and attractive
-            image4.rounded_rectangle([680, 450, 1200, 630], radius=15, fill=(0,0,0,160), outline=theme_color, width=3)
+            # LAYOUT RE-DESIGN (Jaisa aapne manga)
             
-            image4.text((710, 470), text=f"Views    : {views}", fill="white", font=font4, align="left") 
-            image4.text((710, 520), text=f"Duration : {duration}", fill="white", font=font4, align="left") 
-            image4.text((710, 570), text=f"Channel  : {channel}", fill="white", font=font4, align="left")
+            # NOW PLAYING Header (Upar)
+            image4.text((700, 100), "NOW PLAYING", fill="white", font=font2, stroke_width=2, stroke_fill=theme_color, align="left") 
+
+            # Title (Uske just niche)
+            title1 = truncate(title)
+            image4.text((700, 200), text=title1[0], fill="white", font=font3, align="left") 
+            if len(title1) > 1:
+                image4.text((700, 255), text=title1[1], fill="white", font=font3, align="left") 
+
+            # Teeno Stats Title ke exact niche
+            image4.text((700, 330), text=f"Views    : {views}", fill="white", font=font4, align="left") 
+            image4.text((700, 380), text=f"Duration : {duration}", fill="white", font=font4, align="left") 
+            image4.text((700, 430), text=f"Channel  : {channel}", fill="white", font=font4, align="left")
+
+            # SUPER STYLISH PLAY BUTTON (Bottom Right - Jaha pehle box tha)
+            play_x, play_y = 800, 500
+            play_size = 140
+            
+            # Play Button Outer Circle
+            image4.ellipse([play_x, play_y, play_x + play_size, play_y + play_size], outline=theme_color, width=6)
+            
+            # Play Button Inner Triangle
+            tri_x = play_x + 50
+            tri_y = play_y + 35
+            image4.polygon([
+                (tri_x, tri_y),            # Top point
+                (tri_x, tri_y + 70),       # Bottom point
+                (tri_x + 55, tri_y + 35)   # Right point
+            ], fill=theme_color)
 
             # Final Outer Border
             background = ImageOps.expand(background, border=12, fill=theme_color)
