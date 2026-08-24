@@ -9,29 +9,24 @@ from yt_dlp import YoutubeDL
 import numpy as np
 from config import YOUTUBE_IMG_URL
 
-def make_col():
-    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-
-def changeImageSize(maxWidth, maxHeight, image):
-    widthRatio = maxWidth / image.size[0]
-    heightRatio = maxHeight / image.size[1]
-    newWidth = int(widthRatio * image.size[0])
-    newHeight = int(heightRatio * image.size[1])
-    return image.resize((newWidth, newHeight))
+def get_neon_color():
+    # Neon Tech Colors: Cyan, Magenta, Neon Green, Electric Blue
+    colors = [(0, 255, 255), (255, 0, 255), (57, 255, 20), (0, 128, 255)]
+    return random.choice(colors)
 
 def truncate(text):
     list_words = text.split(" ")
     text1, text2 = "", ""    
     for i in list_words:
-        if len(text1) + len(i) < 30:        
+        if len(text1) + len(i) < 25:        
             text1 += " " + i
-        elif len(text2) + len(i) < 30:       
+        elif len(text2) + len(i) < 25:       
             text2 += " " + i
     return [text1.strip(), text2.strip()]
 
-# yt-dlp se details nikalne ka function (Bypasses IP Block)
 def extract_info(url):
-    ydl_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': True}
+    # Removed extract_flat taaki full details aayein
+    ydl_opts = {'quiet': True, 'no_warnings': True}
     with YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, download=False)
 
@@ -46,12 +41,11 @@ async def gen_thumb(videoid):
 
         url = f"https://www.youtube.com/watch?v={videoid}"
         
-        # 1. Safely Extract Details with yt-dlp
+        # 1. Safely Extract Full Details
         try:
             info = await asyncio.to_thread(extract_info, url)
             title = re.sub(r"\W+", " ", info.get("title", "Playing Track")).title()
             
-            # Format duration properly
             duration_seconds = info.get("duration", 0)
             if duration_seconds:
                 mins = int(duration_seconds) // 60
@@ -63,17 +57,13 @@ async def gen_thumb(videoid):
             views = str(info.get("view_count", "Unknown Views"))
             channel = info.get("uploader", "Unknown Channel")
             
-            # Get best thumbnail URL
             if info.get("thumbnails"):
                 thumbnail_url = info["thumbnails"][-1]["url"]
             else:
                 thumbnail_url = f"http://img.youtube.com/vi/{videoid}/maxresdefault.jpg"
         except Exception as e:
-            print(f"yt-dlp extract error: {e}")
-            title = "Playing Track"
-            duration = "Unknown Mins"
-            views = "Unknown Views"
-            channel = "Unknown Channel"
+            print(f"yt-dlp error: {e}")
+            title, duration, views, channel = "Playing Track", "Unknown Mins", "Unknown Views", "Unknown Channel"
             thumbnail_url = f"http://img.youtube.com/vi/{videoid}/hqdefault.jpg"
 
         # 2. Download Thumbnail
@@ -82,69 +72,74 @@ async def gen_thumb(videoid):
                 if resp.status == 200:
                     async with aiofiles.open(raw_thumb, mode="wb") as f:
                         await f.write(await resp.read())
-                else:
-                    async with session.get(f"http://img.youtube.com/vi/{videoid}/hqdefault.jpg") as resp2:
-                        if resp2.status == 200:
-                            async with aiofiles.open(raw_thumb, mode="wb") as f:
-                                await f.write(await resp2.read())
 
         if not os.path.isfile(raw_thumb):
             return YOUTUBE_IMG_URL
 
-        # 3. Image Editing Block
+        # 3. ADVANCED IMAGE EDITING (Tech & Neon Theme)
         try:
-            youtube = Image.open(raw_thumb)
-            image1 = changeImageSize(1280, 720, youtube)
-            image2 = image1.convert("RGBA")
-            background = image2.filter(filter=ImageFilter.BoxBlur(30))
-            enhancer = ImageEnhance.Brightness(background)
-            image2 = enhancer.enhance(0.6)
+            youtube = Image.open(raw_thumb).convert("RGBA")
+            
+            # Background: High-quality Blur & Darken
+            background = youtube.resize((1280, 720), Image.Resampling.LANCZOS)
+            background = background.filter(ImageFilter.GaussianBlur(15))
+            background = ImageEnhance.Brightness(background).enhance(0.25)
+            
+            theme_color = get_neon_color()
 
-            if os.path.isfile("AviaxMusic/assets/circle.png"):
-                circle = Image.open("AviaxMusic/assets/circle.png").convert('RGBA')
-                color = make_col()
-                data = np.array(circle)
-                red, green, blue, alpha = data.T
-                white_areas = (red == 255) & (blue == 255) & (green == 255)
-                data[..., :-1][white_areas.T] = color
-                circle = Image.fromarray(data)
-                
-                image3 = image1.crop((280, 0, 1000, 720))
-                lum_img = Image.new('L', [720, 720], 0)
-                draw = ImageDraw.Draw(lum_img)
-                draw.pieslice([(0, 0), (720, 720)], 0, 360, fill=255, outline="white")
-                img_arr = np.array(image3)
-                lum_img_arr = np.array(lum_img)
-                final_img_arr = np.dstack((img_arr, lum_img_arr))
-                image3 = Image.fromarray(final_img_arr).resize((600, 600))
+            # Center Circle: Perfect crop bina stretch kiye
+            square_img = ImageOps.fit(youtube, (580, 580), centering=(0.5, 0.5))
+            mask = Image.new('L', (580, 580), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, 580, 580), fill=255)
+            square_img.putalpha(mask)
+            
+            # Custom Glowing Neon Ring
+            ring = Image.new('RGBA', (610, 610), (0,0,0,0))
+            ring_draw = ImageDraw.Draw(ring)
+            ring_draw.ellipse((10, 10, 600, 600), outline=theme_color, width=10)
+            
+            # Paste Ring and Center Image
+            background.paste(ring, (45, 55), ring)
+            background.paste(square_img, (60, 70), square_img)
 
-                image2.paste(image3, (50, 70), mask=image3)
-                image2.paste(circle, (0, 0), mask=circle)
-
+            # Fonts setup
             try:
-                font1 = ImageFont.truetype('AviaxMusic/assets/font.ttf', 30)
-                font2 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 70)
-                font3 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 40)
+                font1 = ImageFont.truetype('AviaxMusic/assets/font.ttf', 35)
+                font2 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 75)
+                font3 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 45)
                 font4 = ImageFont.truetype('AviaxMusic/assets/font2.ttf', 35)
             except:
                 font1 = font2 = font3 = font4 = ImageFont.load_default()
 
-            image4 = ImageDraw.Draw(image2)
-            image4.text((10, 10), "KHUSHI VIBES", fill="white", font=font1, align="left") 
-            image4.text((670, 150), "NOW PLAYING", fill="white", font=font2, stroke_width=2, stroke_fill="white", align="left") 
+            image4 = ImageDraw.Draw(background)
+            
+            # Brand Name with Neon effect
+            image4.text((22, 22), "KHUSHI VIBES", fill="black", font=font1, align="left") 
+            image4.text((20, 20), "KHUSHI VIBES", fill=theme_color, font=font1, align="left") 
 
+            # NOW PLAYING Header
+            image4.text((700, 150), "NOW PLAYING", fill="white", font=font2, stroke_width=2, stroke_fill=theme_color, align="left") 
+
+            # Title
             title1 = truncate(title)
-            image4.text((670, 300), text=title1[0], fill="white", stroke_width=1, stroke_fill="white", font=font3, align="left") 
+            image4.text((700, 280), text=title1[0], fill="white", font=font3, align="left") 
             if len(title1) > 1:
-                image4.text((670, 350), text=title1[1], fill="white", stroke_width=1, stroke_fill="white", font=font3, align="left") 
+                image4.text((700, 340), text=title1[1], fill="white", font=font3, align="left") 
 
-            image4.text((670, 450), text=f"Views : {views}", fill="white", font=font4, align="left") 
-            image4.text((670, 500), text=f"Duration : {duration}", fill="white", font=font4, align="left") 
-            image4.text((670, 550), text=f"Channel : {channel}", fill="white", font=font4, align="left")
+            # Stats (Tech-style transparent box)
+            # Semi-transparent box behind the text to make it clear and attractive
+            image4.rounded_rectangle([680, 450, 1200, 630], radius=15, fill=(0,0,0,160), outline=theme_color, width=3)
+            
+            image4.text((710, 470), text=f"Views    : {views}", fill="white", font=font4, align="left") 
+            image4.text((710, 520), text=f"Duration : {duration}", fill="white", font=font4, align="left") 
+            image4.text((710, 570), text=f"Channel  : {channel}", fill="white", font=font4, align="left")
 
-            image2 = ImageOps.expand(image2, border=20, fill=make_col())
-            image2 = image2.convert('RGB')
-            image2.save(final_file)
+            # Final Outer Border
+            background = ImageOps.expand(background, border=12, fill=theme_color)
+            background = background.convert('RGB')
+            
+            background.save(final_file)
             return final_file
 
         except Exception as edit_error:
